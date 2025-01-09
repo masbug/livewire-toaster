@@ -2,48 +2,47 @@ import { Config } from './config';
 import { Toast } from './toast';
 
 export function Hub(Alpine) {
-    Alpine.data('toasterHub', (initialToasts, config) => {
-        config = Config.fromJson(config);
+    Alpine.data('toasterHub', () => ({
+        config: null,
+        _toasts: [],
 
-        return {
-            _toasts: [],
+        get toasts() {
+            const toasts = this._toasts.filter(t => ! t.trashed);
 
-            get toasts() {
-                const toasts = this._toasts.filter(t => ! t.trashed);
+            if (this._toasts.length && ! toasts.length) {
+                this.$nextTick(() => { this._toasts = []; });
+            }
 
-                if (this._toasts.length && ! toasts.length) {
-                    this.$nextTick(() => { this._toasts = []; });
+            return toasts;
+        },
+
+        initToaster(initialToasts, _config) {
+            this.config = Config.fromJson(_config);
+
+            document.addEventListener('toaster:received', event => {
+                const toast = Toast.fromJson({ duration: this.config.duration, ...event.detail });
+
+                if (this.config.replace) {
+                    this.toasts.filter(t => t.equals(toast)).forEach(t => t.dispose());
+                } else if (this.config.suppress && this.toasts.some(t => t.equals(toast))) {
+                    return;
                 }
 
-                return toasts;
-            },
+                this.show(toast);
+            });
 
-            init() {
-                document.addEventListener('toaster:received', event => {
-                    const toast = Toast.fromJson({ duration: config.duration, ...event.detail });
+            initialToasts.map(Toast.fromJson).forEach(toast => this.show(toast));
+        },
 
-                    if (config.replace) {
-                        this.toasts.filter(t => t.equals(toast)).forEach(t => t.dispose());
-                    } else if (config.suppress && this.toasts.some(t => t.equals(toast))) {
-                        return;
-                    }
+        show(toast) {
+            toast = Alpine.reactive(toast);
+            toast.runAfterDuration(toast => toast.dispose());
 
-                    this.show(toast);
-                });
-
-                initialToasts.map(Toast.fromJson).forEach(toast => this.show(toast));
-            },
-
-            show(toast) {
-                toast = Alpine.reactive(toast);
-                toast.runAfterDuration(toast => toast.dispose());
-
-                if (config.alignment.isTop()) {
-                    this._toasts.unshift(toast);
-                } else {
-                    this._toasts.push(toast);
-                }
-            },
-        }
-    });
+            if (this.config.alignment.isTop()) {
+                this._toasts.unshift(toast);
+            } else {
+                this._toasts.push(toast);
+            }
+        },
+    }));
 }
